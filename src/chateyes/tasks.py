@@ -5,26 +5,19 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .models import ModerationResponse, TextModerationRequest
+from .models import ChatMessage, ModerationResponse
 
 Role = Literal["SUBMOD", "MIT", "MOD1", "MOD2"]
 TaskType = Literal[
-    "CAPTURE_EVIDENCE",
-    "DROP_SIGNATURE",
-    "WARN_USER",
-    "MOD_WARNING",
-    "CALL_MIT_MOD",
-    "REPORT_USER",
-    "REQUEST_PROFILE_CHANGE",
-    "REQUEST_MEDIA_REMOVAL",
-    "REQUEST_MUTE",
-    "SKIP_DUPLICATE",
+    "CAPTURE_EVIDENCE", "DROP_SIGNATURE", "WARN_USER", "MOD_WARNING",
+    "CALL_MIT_MOD", "REPORT_USER", "REQUEST_PROFILE_CHANGE",
+    "REQUEST_MEDIA_REMOVAL", "REQUEST_MUTE", "SKIP_DUPLICATE",
 ]
 TaskStatus = Literal["PENDING", "COMPLETED", "SKIPPED"]
 
 
 class TaskGenerationRequest(BaseModel):
-    messages: TextModerationRequest = Field(alias="moderation")
+    messages: list[ChatMessage] = Field(min_length=1)
     role: Role = "MIT"
     screenshot_available: bool = True
     moderator_present: bool = False
@@ -32,8 +25,6 @@ class TaskGenerationRequest(BaseModel):
     warning_count: int = Field(default=0, ge=0)
     user_stopped: bool = False
     direct_report_flags: list[str] = Field(default_factory=list)
-
-    model_config = {"populate_by_name": True}
 
 
 @dataclass(frozen=True)
