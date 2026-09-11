@@ -20,7 +20,13 @@ def moderate_messages(
     for message in messages:
         text = _normalized(message.text)
         detected_language = detect_language(text)
-        for match in evaluate(text, confidence_threshold):
+        for match in evaluate(
+            text,
+            username=_normalized(message.username),
+            media_description=_normalized(message.media_description),
+            media_present=message.media_present,
+            confidence_threshold=confidence_threshold,
+        ):
             violations.append(
                 Violation(
                     username=message.username,
