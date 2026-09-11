@@ -3,6 +3,7 @@ from io import BytesIO
 from PIL import Image
 from fastapi.testclient import TestClient
 
+from chateyes.language import detect_language, normalize_for_detection
 from chateyes.main import app
 from chateyes.ocr import TesseractOCR
 
@@ -40,6 +41,40 @@ def test_threat_violation() -> None:
     body = response.json()
     assert body["violations"][0]["rule_id"] == "RULE_HARASSMENT_HATE"
     assert body["violations"][0]["recommended_action"] == "BAN"
+
+
+def test_unicode_normalization_removes_zero_width_obfuscation() -> None:
+    assert normalize_for_detection("s\u200bex") == "sex"
+
+
+def test_script_language_detection() -> None:
+    assert detect_language("नमस्ते") == "Hindi"
+    assert detect_language("שלום") == "Hebrew"
+    assert detect_language("مرحبا") == "Arabic"
+
+
+def test_transliterated_language_detection() -> None:
+    assert detect_language("aap kya hai") == "Transliterated Hindi"
+    assert detect_language("ana habibi shukran") == "Transliterated Arabic"
+
+
+def test_multilingual_metadata_is_attached_to_violation() -> None:
+    response = client.post(
+        "/moderate",
+        json={"messages": [{"username": "user1", "text": "send nude pics", "detected_language": "Hindi"}]},
+    )
+    body = response.json()
+    assert body["violations"][0]["detected_language"] == "English"
+
+
+def test_transliterated_explicit_term_is_detected() -> None:
+    response = client.post(
+        "/moderate",
+        json={"messages": [{"username": "user2", "text": "chut"}]},
+    )
+    body = response.json()
+    assert body["violations"][0]["rule_id"] == "RULE_SEXUAL_EXPLICIT"
+    assert body["violations"][0]["severity"] == "HIGH"
 
 
 def _png_bytes() -> bytes:
