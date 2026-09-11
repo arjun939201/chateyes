@@ -22,7 +22,7 @@ def moderate_messages(
         detected_language = detect_language(text)
         for match in evaluate(
             text,
-            username=_normalized(message.username),
+            username=_normalized(message.username).replace("_", " "),
             media_description=_normalized(message.media_description),
             media_present=message.media_present,
             confidence_threshold=confidence_threshold,
