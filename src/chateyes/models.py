@@ -34,6 +34,8 @@ class ChatMessage(BaseModel):
     text: str
     detected_language: str = "English"
     translated_english_summary: str = ""
+    media_description: str = ""
+    media_present: bool = False
 
 
 class TextModerationRequest(BaseModel):
