@@ -38,3 +38,9 @@ class ChatMessage(BaseModel):
 
 class TextModerationRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
+
+
+class OCRResponse(BaseModel):
+    text: str
+    engine: str
+    language: str
