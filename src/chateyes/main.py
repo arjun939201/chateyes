@@ -17,6 +17,18 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/health/ocr")
+def ocr_health() -> dict[str, object]:
+    """Report whether the Tesseract executable is available to the service."""
+    runtime = TesseractOCR.runtime_status()
+    return {
+        "status": "ok" if runtime.available else "unavailable",
+        "engine": TesseractOCR.engine_name,
+        "executable": runtime.executable,
+        "version": runtime.version,
+    }
+
+
 @app.post("/moderate", response_model=ModerationResponse)
 def moderate(request: TextModerationRequest) -> ModerationResponse:
     return moderate_messages(request.messages)
