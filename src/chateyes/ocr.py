@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from io import BytesIO
+import shutil
+import subprocess
 
 from PIL import Image, ImageOps
 
@@ -21,6 +23,13 @@ class OCRResult:
     language: str
 
 
+@dataclass(frozen=True)
+class OCRRuntimeStatus:
+    available: bool
+    executable: str | None
+    version: str | None
+
+
 class TesseractOCR:
     """Local OCR adapter around Tesseract, kept behind a small replaceable interface."""
 
@@ -31,13 +40,37 @@ class TesseractOCR:
     def __init__(self, language: str = "eng") -> None:
         self.language = language
 
+    @classmethod
+    def runtime_status(cls) -> OCRRuntimeStatus:
+        executable = shutil.which("tesseract")
+        if not executable:
+            return OCRRuntimeStatus(False, None, None)
+        try:
+            result = subprocess.run(
+                [executable, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+            first_line = (result.stdout or result.stderr).splitlines()[0].strip()
+            return OCRRuntimeStatus(result.returncode == 0, executable, first_line or None)
+        except (OSError, subprocess.SubprocessError):
+            return OCRRuntimeStatus(False, executable, None)
+
     def extract_text(self, image_bytes: bytes) -> OCRResult:
         try:
             import pytesseract
         except ImportError as exc:
             raise OCRConfigurationError(
-                "Tesseract OCR dependencies are not installed."
+                "Tesseract OCR Python dependencies are not installed."
             ) from exc
+
+        runtime = self.runtime_status()
+        if not runtime.available:
+            raise OCRConfigurationError(
+                "Tesseract OCR engine is unavailable in the deployment environment."
+            )
 
         try:
             with Image.open(BytesIO(image_bytes)) as image:
@@ -49,10 +82,14 @@ class TesseractOCR:
                 image.load()
                 prepared = self._prepare(image)
                 text = pytesseract.image_to_string(prepared, lang=self.language)
+        except OCRConfigurationError:
+            raise
         except OCRProcessingError:
             raise
-        except Exception as exc:  # OCR libraries expose several engine-specific errors.
-            raise OCRProcessingError("Unable to extract text from the image.") from exc
+        except Exception as exc:
+            raise OCRProcessingError(
+                "OCR failed while processing the image. Verify the image and OCR language data."
+            ) from exc
 
         return OCRResult(
             text=_clean_text(text),
@@ -63,7 +100,6 @@ class TesseractOCR:
     @staticmethod
     def _prepare(image: Image.Image) -> Image.Image:
         image = ImageOps.exif_transpose(image).convert("RGB")
-        # Upscaling improves small chat-font recognition without changing the source file.
         width, height = image.size
         if width < 1600:
             scale = min(1600 / max(width, 1), 3.0)
