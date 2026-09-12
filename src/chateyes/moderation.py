@@ -12,6 +12,11 @@ def _normalized(text: str) -> str:
     return normalize_for_detection(text)
 
 
+def _normalized_profile(text: str) -> str:
+    """Normalize profile labels without stripping separators between letters."""
+    return unicodedata.normalize("NFKC", text).strip()
+
+
 def moderate_messages(
     messages: list[ChatMessage], *, confidence_threshold: float = 0.80
 ) -> ModerationResponse:
@@ -22,7 +27,7 @@ def moderate_messages(
         detected_language = detect_language(text)
         for match in evaluate(
             text,
-            username=_normalized(message.username).replace("_", " "),
+            username=_normalized_profile(message.username),
             media_description=_normalized(message.media_description),
             media_present=message.media_present,
             confidence_threshold=confidence_threshold,
