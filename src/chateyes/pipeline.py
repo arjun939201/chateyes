@@ -33,7 +33,7 @@ def _clean_line(raw_line: str) -> str:
 
 
 def _looks_like_ui(line: str) -> bool:
-    """Reject obvious status-bar/composer/navigation OCR instead of moderating it as chat."""
+    """Reject obvious status-bar/composer/navigation OCR instead of chat."""
     if not line or _TIME_ONLY_RE.match(line):
         return True
     return bool(_UI_RE.match(line))
@@ -43,20 +43,19 @@ def _valid_speaker(username: str) -> bool:
     username = username.strip()
     if not username or _TIME_ONLY_RE.match(username):
         return False
-    # A username should contain at least one alphabetic character; this prevents
-    # OCR fragments such as `7` or `54` becoming fake speakers.
     return any(char.isalpha() for char in username)
 
 
 def parse_ocr_messages(text: str) -> list[ChatMessage]:
-    """Convert OCR into chat candidates while filtering obvious UI noise.
+    """Convert OCR into structured chat candidates while filtering UI noise.
 
-    When OCR cannot recover a speaker delimiter, preserve each meaningful line as
-    an anonymous message rather than merging the whole screenshot into one fake
-    message. This makes downstream moderation much more reliable.
+    Explicit speaker boundaries start new messages. Non-speaker lines after a
+    valid speaker remain continuations, matching normal multiline chat behavior.
+    Standalone OCR lines are retained anonymously so moderation can still inspect
+    them without inventing a username.
     """
     messages: list[ChatMessage] = []
-    pending: ChatMessage | None = None
+    current: ChatMessage | None = None
 
     for raw_line in text.splitlines():
         line = _clean_line(raw_line)
@@ -65,23 +64,21 @@ def parse_ocr_messages(text: str) -> list[ChatMessage]:
 
         match = _SPEAKER_RE.match(line)
         if match and _valid_speaker(match.group("username")):
-            if pending is not None:
-                messages.append(pending)
-            pending = ChatMessage(
+            if current is not None:
+                messages.append(current)
+            current = ChatMessage(
                 username=match.group("username").strip(),
                 text=match.group("text").strip(),
             )
             continue
 
-        # No trustworthy speaker boundary. Keep the line independently so a
-        # violation on one OCR line cannot be hidden inside a giant message.
-        if pending is not None:
-            messages.append(pending)
-            pending = None
-        messages.append(ChatMessage(text=line))
+        if current is None:
+            messages.append(ChatMessage(text=line))
+        else:
+            current.text = f"{current.text} {line}".strip()
 
-    if pending is not None:
-        messages.append(pending)
+    if current is not None:
+        messages.append(current)
     return messages
 
 
