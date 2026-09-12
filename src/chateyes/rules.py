@@ -35,12 +35,10 @@ class ModerationRule:
         return RuleMatch(self.rule_id, self.severity, self.recommended_action, self.confidence, self.justification, self.summary)
 
 
-# Patterns intentionally include common romanized Hindi spellings seen in chat.
-# They are phrase-based where possible to reduce false positives from OCR noise.
 RULES: tuple[ModerationRule, ...] = (
     ModerationRule(
         "RULE_HARASSMENT_HATE", "CRITICAL", "BAN",
-        re.compile(r"\b(?:kill\s+you|i\s+will\s+kill|go\s+kill\s+yourself|mar\s+doonga|maar\s+doonga|mar\s+dalunga|maar\s+dalunga|maar\s+khayega|maar\s+khaega)\b", re.I),
+        re.compile(r"\b(?:kill\s+you|i\s+will\s+kill|go\s+kill\s+yourself|mar\s+(?:doonga|dunga|dalunga|deunga)|maar\s+(?:doonga|dunga|dalunga|deunga)|(?:maar|mar)\s+(?:khayega|khaega))\b", re.I),
         0.99, "The message contains a direct threat or violent intimidation.", "Threatening or abusive content"
     ),
     ModerationRule(
@@ -52,7 +50,7 @@ RULES: tuple[ModerationRule, ...] = (
         "RULE_INAPPROPRIATE_NICKNAME_OR_MEDIA", "MEDIUM", "REVIEW", None, 0.90,
         "The visible nickname or media description contains a potentially inappropriate adult-content signal and should be reviewed.",
         "Potentially inappropriate nickname or media",
-        matcher=lambda value: bool(re.search(r"\b(?:nude|nudes|porn|xxx|sexcam|nsfw|onlyfans|18\+|adult)\b", value, re.I))
+        matcher=lambda value: bool(re.search(r"(?:^|[^a-z0-9])(?:nude|nudes|porn|xxx|sexcam|nsfw|onlyfans|18\+|adult)(?:$|[^a-z0-9])", value, re.I))
     ),
     ModerationRule(
         "RULE_SPAM_SOLICITATION", "LOW", "WARN",
@@ -66,21 +64,27 @@ _SEVERITY_RANK: dict[Severity, int] = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITIC
 
 
 def evaluate(text: str, *, username: str = "", media_description: str = "", media_present: bool = False, confidence_threshold: float = 0.80) -> list[RuleMatch]:
-    """Evaluate text plus optional nickname/media signals and keep the strongest hit."""
+    """Evaluate message text and profile/media signals deterministically."""
     if not 0.0 <= confidence_threshold <= 1.0:
         raise ValueError("confidence_threshold must be between 0 and 1")
 
     matches: list[RuleMatch] = []
+    profile_rule = next(r for r in RULES if r.rule_id == "RULE_INAPPROPRIATE_NICKNAME_OR_MEDIA")
+
     for rule in RULES:
-        if rule.rule_id == "RULE_INAPPROPRIATE_NICKNAME_OR_MEDIA":
+        if rule.rule_id == profile_rule.rule_id:
             continue
         match = rule.match(text)
         if match and match.confidence >= confidence_threshold:
             matches.append(match)
 
-    if media_present and (username or media_description):
-        rule = next(r for r in RULES if r.rule_id == "RULE_INAPPROPRIATE_NICKNAME_OR_MEDIA")
-        match = rule.match(" ".join(part for part in (username, media_description) if part))
+    # Nicknames are visible profile evidence. Media descriptions are considered
+    # only when media is confirmed present.
+    profile_signal = " ".join(
+        part for part in (username, media_description if media_present else "") if part
+    ).strip()
+    if profile_signal:
+        match = profile_rule.match(profile_signal.replace("_", " "))
         if match and match.confidence >= confidence_threshold:
             matches.append(match)
 
