@@ -35,11 +35,30 @@ class ModerationRule:
         return RuleMatch(self.rule_id, self.severity, self.recommended_action, self.confidence, self.justification, self.summary)
 
 
+# Patterns intentionally include common romanized Hindi spellings seen in chat.
+# They are phrase-based where possible to reduce false positives from OCR noise.
 RULES: tuple[ModerationRule, ...] = (
-    ModerationRule("RULE_HARASSMENT_HATE", "CRITICAL", "BAN", re.compile(r"\b(?:kill\s+you|i\s+will\s+kill|go\s+kill\s+yourself|mar\s+doonga|maar\s+doonga)\b", re.I), 0.99, "The message contains a direct threat or encouragement of violence/self-harm.", "Threatening or abusive content"),
-    ModerationRule("RULE_SEXUAL_EXPLICIT", "HIGH", "MUTE", re.compile(r"\b(?:fuck|fucking|sex|sexy|nude|nudes|dick|pussy|horny|blowjob|porn|chut|lund|choot|randi|jism\s*ka)\b", re.I), 0.97, "The message contains an explicit or sexually suggestive term.", "Sexually explicit or suggestive content"),
-    ModerationRule("RULE_INAPPROPRIATE_NICKNAME_OR_MEDIA", "MEDIUM", "REVIEW", None, 0.90, "The visible nickname or media description contains a potentially inappropriate adult-content signal and should be reviewed.", "Potentially inappropriate nickname or media", matcher=lambda value: bool(re.search(r"\b(?:nude|nudes|porn|xxx|sexcam|nsfw|onlyfans)\b", value, re.I))),
-    ModerationRule("RULE_SPAM_SOLICITATION", "LOW", "WARN", re.compile(r"\b(?:like\s*4\s*like|like\s*for\s*like|f4f|sub4sub|follow\s*4\s*follow|gift\s*(?:exchange|for))\b", re.I), 0.95, "The message requests reciprocal engagement or an unsolicited promotional exchange.", "Spam or solicitation"),
+    ModerationRule(
+        "RULE_HARASSMENT_HATE", "CRITICAL", "BAN",
+        re.compile(r"\b(?:kill\s+you|i\s+will\s+kill|go\s+kill\s+yourself|mar\s+doonga|maar\s+doonga|mar\s+dalunga|maar\s+dalunga|maar\s+khayega|maar\s+khaega)\b", re.I),
+        0.99, "The message contains a direct threat or violent intimidation.", "Threatening or abusive content"
+    ),
+    ModerationRule(
+        "RULE_SEXUAL_EXPLICIT", "HIGH", "MUTE",
+        re.compile(r"\b(?:fuck|fucking|sex|sexy|nude|nudes|dick|pussy|horny|blowjob|porn|chut|lund|choot|randi|jism\s*ka)\b", re.I),
+        0.97, "The message contains an explicit or sexually suggestive term.", "Sexually explicit or suggestive content"
+    ),
+    ModerationRule(
+        "RULE_INAPPROPRIATE_NICKNAME_OR_MEDIA", "MEDIUM", "REVIEW", None, 0.90,
+        "The visible nickname or media description contains a potentially inappropriate adult-content signal and should be reviewed.",
+        "Potentially inappropriate nickname or media",
+        matcher=lambda value: bool(re.search(r"\b(?:nude|nudes|porn|xxx|sexcam|nsfw|onlyfans|18\+|adult)\b", value, re.I))
+    ),
+    ModerationRule(
+        "RULE_SPAM_SOLICITATION", "LOW", "WARN",
+        re.compile(r"\b(?:like\s*4\s*like|like\s*for\s*like|f4f|sub4sub|follow\s*4\s*follow|gift\s*(?:exchange|for)|dm\s*(?:me|for)|promo(?:te|tion)?\s+me)\b", re.I),
+        0.95, "The message requests reciprocal engagement or an unsolicited promotional exchange.", "Spam or solicitation"
+    ),
 )
 
 _RULE_ORDER = {rule.rule_id: index for index, rule in enumerate(RULES)}
