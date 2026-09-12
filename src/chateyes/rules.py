@@ -35,6 +35,18 @@ class ModerationRule:
         return RuleMatch(self.rule_id, self.severity, self.recommended_action, self.confidence, self.justification, self.summary)
 
 
+_PROFILE_SIGNALS = frozenset({"nude", "nudes", "porn", "xxx", "sexcam", "nsfw", "onlyfans", "adult"})
+
+
+def _profile_signal_match(value: str) -> bool:
+    """Match adult-content profile/media signals across common separators."""
+    compact = value.casefold().replace(" ", "")
+    if "18+" in compact:
+        return True
+    tokens = set(re.findall(r"[a-z0-9]+", value.casefold()))
+    return bool(tokens & _PROFILE_SIGNALS)
+
+
 RULES: tuple[ModerationRule, ...] = (
     ModerationRule(
         "RULE_HARASSMENT_HATE", "CRITICAL", "BAN",
@@ -50,7 +62,7 @@ RULES: tuple[ModerationRule, ...] = (
         "RULE_INAPPROPRIATE_NICKNAME_OR_MEDIA", "MEDIUM", "REVIEW", None, 0.90,
         "The visible nickname or media description contains a potentially inappropriate adult-content signal and should be reviewed.",
         "Potentially inappropriate nickname or media",
-        matcher=lambda value: bool(re.search(r"(?:^|[^a-z0-9])(?:nude|nudes|porn|xxx|sexcam|nsfw|onlyfans|18\+|adult)(?:$|[^a-z0-9])", value, re.I))
+        matcher=_profile_signal_match,
     ),
     ModerationRule(
         "RULE_SPAM_SOLICITATION", "LOW", "WARN",
@@ -64,7 +76,7 @@ _SEVERITY_RANK: dict[Severity, int] = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITIC
 
 
 def evaluate(text: str, *, username: str = "", media_description: str = "", media_present: bool = False, confidence_threshold: float = 0.80) -> list[RuleMatch]:
-    """Evaluate message text and profile/media signals deterministically."""
+    """Evaluate message text and visible profile/media signals deterministically."""
     if not 0.0 <= confidence_threshold <= 1.0:
         raise ValueError("confidence_threshold must be between 0 and 1")
 
@@ -78,13 +90,11 @@ def evaluate(text: str, *, username: str = "", media_description: str = "", medi
         if match and match.confidence >= confidence_threshold:
             matches.append(match)
 
-    # Nicknames are visible profile evidence. Media descriptions are considered
-    # only when media is confirmed present.
-    profile_signal = " ".join(
-        part for part in (username, media_description if media_present else "") if part
-    ).strip()
+    # Nicknames are always visible profile evidence. Media descriptions are
+    # evaluated only when the caller confirms that media is actually present.
+    profile_signal = " ".join(part for part in (username, media_description if media_present else "") if part).strip()
     if profile_signal:
-        match = profile_rule.match(profile_signal.replace("_", " "))
+        match = profile_rule.match(profile_signal)
         if match and match.confidence >= confidence_threshold:
             matches.append(match)
 
